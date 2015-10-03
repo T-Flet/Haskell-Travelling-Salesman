@@ -22,7 +22,7 @@
 
 ---- 1 - IMPORTS AND TYPE DECLARATIONS -----------------------------------------
 
-import Data.List (sortBy, (\\))
+import Data.List (sortBy, (\\), delete, intersect)
 import Data.Function (on)
 
 
@@ -49,10 +49,14 @@ main = do
   pointsText <- readFile "g7k.tsp"
   let points = extractPoints . map words . reverse $ lines pointsText
   let edges  = sortBy (compare `on` eLen) $ extractLengths points
-  return . makeLoop $ enoughEdges edges
+  let shortLoop = makeLoop edges
+  --return $ lengthAndPerm shortLoop
+  return shortLoop
   --return . length $ enoughEdges edges
   --return $ takeWhile ((==0.0) . eLen) edges
   --return $ length points
+
+
 
 
   -- Make a list of points data structure from the equivalent text
@@ -73,12 +77,12 @@ extractLengths = map edgify . combinations 2
 
   -- Return as many edges as needed to be able to make a loop
   -- I.e. As many as are required until each point comes up at least twice in them
-enoughEdges :: [Edge] -> [Edge]
-enoughEdges = checkPoints [] ([0..347] ++ [0..347])
-  where checkPoints :: [Edge] -> [Int] -> [Edge] -> [Edge]
-        checkPoints acc [] _ = acc
-        checkPoints acc pids (e@(Edge _ (Point pid1 _ _) (Point pid2 _ _)):es) =
-            checkPoints (e:acc) (pids \\ [pid1,pid2]) es
+--enoughEdges :: [Edge] -> [Edge]
+--enoughEdges = checkPoints [] ([0..347] ++ [0..347])
+--  where checkPoints :: [Edge] -> [Int] -> [Edge] -> [Edge]
+--        checkPoints acc [] _ = acc
+--        checkPoints acc pids (e@(Edge _ (Point pid1 _ _) (Point pid2 _ _)):es) =
+--            checkPoints (e:acc) (pids \\ [pid1,pid2]) es
 
 
   -- Return an (unsorted but closed) loop (list of Edges) from a list of Edges
@@ -93,21 +97,37 @@ makeLoop = needPoints [] ([0..347] ++ [0..347])
           | otherwise = needPoints acc pids es
 
 
+  -- Return the length of a loop and its corresponding permutation of points
+lengthAndPerm :: [Edge] -> (Float,[Int])
+lengthAndPerm lp = (l, perm)
+  where l = sum $ map eLen lp
+        perm = getNextPid [] $ map getPids lp
+        getNextPid :: [Int] -> [[Int]] -> [Int]
+        getNextPid [] ([pid1,pid2]:ePids) = getNextPid [pid1,pid2] ePids
+        getNextPid acc [] = acc
+        getNextPid acc@(lastPid:_) ePids = getNextPid (newPid:acc) (delete pidPair ePids)
+          where [newPid] = delete lastPid pidPair
+                [pidPair] = filter (lastPid `elem`) ePids
+
+
 
 ---- 5 - OTHER FUNCTIONS -------------------------------------------------------
 
-  -- Check whether a Point is in an Edge
-isIn :: Int -> Edge -> Bool
-pid `isIn` (Edge _ p1 p2) = (pid == pId p1) || (pid == pId p2)
+  -- Check whether a Point is or is not in an Edge
+isIn, isNotIn :: Int -> Edge -> Bool
+pid `isIn`    (Edge _ p1 p2) = (pid == pId p1) || (pid == pId p2)
+pid `isNotIn` (Edge _ p1 p2) = (pid /= pId p1) && (pid /= pId p2)
 
 
-
+  -- Extract the pids of the Points of an Edge
+getPids :: Edge -> [Int]
+getPids (Edge _ (Point pid1 _ _) (Point pid2 _ _)) = [pid1,pid2]
 
 
 
 -- Other Functions
 
--- Check whether a set is a subset of a second set
+  -- Check whether a set is a subset of a second set
 subsetOf, notSubsetOf :: (Eq a) => [a] -> [a] -> Bool
 a `subsetOf` b    = all (`elem` b)    a
 a `notSubsetOf` b = any (`notElem` b) a
