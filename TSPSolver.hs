@@ -3,7 +3,7 @@
 --   Author:
 --       Dr-Lord
 --   Version:
---       0.1 02/10/2015
+--       0.2 03/10/2015
 --
 --   Repository:
 --       https://github.com/Dr-Lord/Haskell-Travelling-Salesman
@@ -22,7 +22,7 @@
 
 ---- 1 - IMPORTS AND TYPE DECLARATIONS -----------------------------------------
 
-import Data.List (sortBy, (\\), delete, intersect)
+import Data.List (sortBy, (\\), delete, intersect, minimumBy, nub, partition)
 import Data.Function (on)
 
 
@@ -50,6 +50,17 @@ data Edge  = Edge  {eLen :: Float, eP1 :: Point, eP2 :: Point} deriving (Eq, Ord
   --        going to join them; then only operate on the smallest differences
 
 
+-- Perhaps consider using noSuperest to clear remainging edges of done points
+
+
+-- Set up a random path generator program and leave it running until the end, printing
+-- out only better paths than the best one so far in a separate shell
+
+
+-- Set up a 2-opt
+-- Set up a Furthest Insertion one
+
+
 
 ---- 4 - MAIN FUNCTIONS --------------------------------------------------------
 
@@ -58,10 +69,13 @@ main = do
   pointsText <- readFile "g7k.tsp"
   let points = extractPoints . map words . reverse $ lines pointsText
   let edges  = sortBy (compare `on` eLen) $ extractLengths points
-  let shortLoop = possLoopSet edges
-  return $ identifyLoops shortLoop
-  --return $ lengthAndPerm shortLoop
-  --return shortLoop
+  let (possLoop,rest) = spanPossLoop edges
+  let (open,loops) = partitionFragments $ linkPossEdges possLoop
+  return $ map (map pId . pointsIn) open
+  --return $ map (map pId . pointsIn) loops
+  --return $ linkPossEdges possLoop
+  --return $ lengthAndPerm possLoop
+  --return possLoop
   --return . length $ enoughEdges edges
   --return $ takeWhile ((==0.0) . eLen) edges
   --return $ length points
@@ -96,19 +110,19 @@ extractLengths = map edgify . combinations 2
 
   -- Return the smallest unsorted list of Edges which could constitute a single loop
   -- I.e. each point is present at least in 2 of them, and at least one in exactly 2
-possLoopSet :: [Edge] -> [Edge]
-possLoopSet = needPoints [] ([0..347] ++ [0..347])
-  where needPoints :: [Edge] -> [Int] -> [Edge] -> [Edge]
-        needPoints _ _ [] = error "This is bad"
-        needPoints acc [] _ = acc
+spanPossLoop :: [Edge] -> ([Edge],[Edge])
+spanPossLoop = needPoints [] ([0..347] ++ [0..347])
+  where needPoints :: [Edge] -> [Int] -> [Edge] -> ([Edge],[Edge])
+        needPoints _   _     [] = error "This is bad"
+        needPoints acc []    es = (acc, es)
         needPoints acc pids (e@(Edge _ (Point pid1 _ _) (Point pid2 _ _)):es)
           | [pid1,pid2] `subsetOf` pids = needPoints (e:acc) (pids \\ [pid1,pid2]) es
           | otherwise = needPoints acc pids es
 
 
-  -- Isolate all loops contained in a lost of Edges
-identifyLoops :: [Edge] -> [[Edge]]
-identifyLoops = getNextPid []
+  -- Link together all possible Edges in a set, resulting in both open and closed fragments
+linkPossEdges :: [Edge] -> [[Edge]]
+linkPossEdges = getNextPid []
   where getNextPid :: [[Edge]] -> [Edge] -> [[Edge]]
         getNextPid [] (e:es) = getNextPid [[e]] es
         getNextPid acc []    = acc
@@ -116,7 +130,8 @@ identifyLoops = getNextPid []
             case filter (pidsInCommon . getPids) ees of
               []   -> getNextPid ([e]:accAcc) es
               [ne] -> getNextPid ((ne:acc):accs) (delete ne es)
-              nes  -> error $ show [nes, [], []]
+              nes  -> getNextPid ((minNe:acc):accs) (delete minNe es)
+                where minNe = minimumBy (compare `on` eLen) nes
           where pidsInCommon = not . null . intersect (getPids ae)
 
 
@@ -147,6 +162,29 @@ identifyLoops = getNextPid []
 getPids :: Edge -> [Int]
 getPids (Edge _ (Point pid1 _ _) (Point pid2 _ _)) = [pid1,pid2]
 
+
+  -- Return the Points in a list of Edges
+pointsIn :: [Edge] -> [Point]
+pointsIn = nub . accPoints []
+  where accPoints [] (Edge _ p1 p2 :es) = accPoints [p1,p2] es
+        accPoints acc [] = acc
+        accPoints ps (Edge _ p1 p2 :es) = accPoints (p1:p2:ps) es
+
+  -- Return a string of Point unique identites one per line
+stringify :: [Edge] -> String
+stringify = unlines . map show . foldr orderPids []
+  where orderPids (Edge _ (Point pid1 _ _) (Point pid2 _ _)) [] = [pid1,pid2]
+        orderPids (Edge _ (Point pid1 _ _) (Point pid2 _ _)) acc@(lastPid:_)
+          | pid1 == lastPid = pid2:acc
+          | otherwise       = pid1:acc
+
+
+  -- Partition path fragments into open ones and loops; it returns (open,loops)
+partitionFragments :: [[Edge]] -> ([[Edge]],[[Edge]])
+partitionFragments = partition isOpen
+  where isOpen [e]     = True
+        isOpen [e1,e2] = True
+        isOpen (e:es)  = null . (intersect `on` getPids) e $ last es
 
 
 -- Other Functions
