@@ -40,6 +40,15 @@ data Edge  = Edge  {eLen :: Float, eP1 :: Point, eP2 :: Point} deriving (Eq, Ord
 
 ---- 3 - TO DO -----------------------------------------------------------------
 
+-- Since there are many small loops in the obtained result so far, isolate them,
+-- and then go through the remaining edges looking for the shortest between elements
+-- of each group in order toconnect them all.
+  --  NOTE: Use the remaining edges in the last shortlist before extending it,
+  --        as they are shorter, XD
+  --  NOTE: Eventually consider both the length of the edges which are going to be
+  --        replaced in order to join loops and the length of the edges which are
+  --        going to join them; then only operate on the smallest differences
+
 
 
 ---- 4 - MAIN FUNCTIONS --------------------------------------------------------
@@ -49,13 +58,13 @@ main = do
   pointsText <- readFile "g7k.tsp"
   let points = extractPoints . map words . reverse $ lines pointsText
   let edges  = sortBy (compare `on` eLen) $ extractLengths points
-  let shortLoop = makeLoop edges
+  let shortLoop = possLoopSet edges
+  return $ identifyLoops shortLoop
   --return $ lengthAndPerm shortLoop
-  return shortLoop
+  --return shortLoop
   --return . length $ enoughEdges edges
   --return $ takeWhile ((==0.0) . eLen) edges
   --return $ length points
-
 
 
 
@@ -85,10 +94,10 @@ extractLengths = map edgify . combinations 2
 --            checkPoints (e:acc) (pids \\ [pid1,pid2]) es
 
 
-  -- Return an (unsorted but closed) loop (list of Edges) from a list of Edges
-  -- with each point present at least in 2 of them
-makeLoop :: [Edge] -> [Edge]
-makeLoop = needPoints [] ([0..347] ++ [0..347])
+  -- Return the smallest unsorted list of Edges which could constitute a single loop
+  -- I.e. each point is present at least in 2 of them, and at least one in exactly 2
+possLoopSet :: [Edge] -> [Edge]
+possLoopSet = needPoints [] ([0..347] ++ [0..347])
   where needPoints :: [Edge] -> [Int] -> [Edge] -> [Edge]
         needPoints _ _ [] = error "This is bad"
         needPoints acc [] _ = acc
@@ -97,26 +106,41 @@ makeLoop = needPoints [] ([0..347] ++ [0..347])
           | otherwise = needPoints acc pids es
 
 
+  -- Isolate all loops contained in a lost of Edges
+identifyLoops :: [Edge] -> [[Edge]]
+identifyLoops = getNextPid []
+  where getNextPid :: [[Edge]] -> [Edge] -> [[Edge]]
+        getNextPid [] (e:es) = getNextPid [[e]] es
+        getNextPid acc []    = acc
+        getNextPid accAcc@(acc@(ae:_):accs) ees@(e:es) =
+            case filter (pidsInCommon . getPids) ees of
+              []   -> getNextPid ([e]:accAcc) es
+              [ne] -> getNextPid ((ne:acc):accs) (delete ne es)
+              nes  -> error $ show [nes, [], []]
+          where pidsInCommon = not . null . intersect (getPids ae)
+
+
   -- Return the length of a loop and its corresponding permutation of points
-lengthAndPerm :: [Edge] -> (Float,[Int])
-lengthAndPerm lp = (l, perm)
-  where l = sum $ map eLen lp
-        perm = getNextPid [] $ map getPids lp
-        getNextPid :: [Int] -> [[Int]] -> [Int]
-        getNextPid [] ([pid1,pid2]:ePids) = getNextPid [pid1,pid2] ePids
-        getNextPid acc [] = acc
-        getNextPid acc@(lastPid:_) ePids = getNextPid (newPid:acc) (delete pidPair ePids)
-          where [newPid] = delete lastPid pidPair
-                [pidPair] = filter (lastPid `elem`) ePids
+--lengthAndPerm :: [Edge] -> (Float,[Int])
+--lengthAndPerm lp = (l, perm)
+--  where l = sum $ map eLen lp
+--        perm = getNextPid [] $ map getPids lp
+--        getNextPid :: [[Int]] -> [[Int]] -> [[Int]]
+--        getNextPid [] ([pid1,pid2]:ePids) = getNextPid [pid1,pid2] ePids
+--        getNextPid acc [] = acc
+--        getNextPid acc@(lastPid:_) ePids = getNextPid (newPid:acc) (delete pidPair ePids)
+--          where [newPid] = delete lastPid pidPair
+--                pidPair = case filter (lastPid `elem`) ePids of
+--                  [] ->
 
 
 
 ---- 5 - OTHER FUNCTIONS -------------------------------------------------------
 
   -- Check whether a Point is or is not in an Edge
-isIn, isNotIn :: Int -> Edge -> Bool
-pid `isIn`    (Edge _ p1 p2) = (pid == pId p1) || (pid == pId p2)
-pid `isNotIn` (Edge _ p1 p2) = (pid /= pId p1) && (pid /= pId p2)
+--isIn, isNotIn :: Int -> Edge -> Bool
+--pid `isIn`    (Edge _ p1 p2) = (pid == pId p1) || (pid == pId p2)
+--pid `isNotIn` (Edge _ p1 p2) = (pid /= pId p1) && (pid /= pId p2)
 
 
   -- Extract the pids of the Points of an Edge
