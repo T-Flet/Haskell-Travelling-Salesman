@@ -3,7 +3,7 @@
 --   Author:
 --       Dr-Lord
 --   Version:
---       0.3 03/10/2015
+--       0.2 03/10/2015
 --
 --   Repository:
 --       https://github.com/Dr-Lord/Haskell-Travelling-Salesman
@@ -12,8 +12,7 @@
 --      Program to solve or approximate a solution to a Travelling Salesman Problem
 --      as explained in this repository:
 --            https://github.com/GUTS2015/Glasgow-TSP-Challenge
---      This program generates random paths and keeps track of the shortest so far,
---      printing any new one both on terminal and to file.
+--      This program implements the 2-opt optimisation algorithm for TSP.
 --
 --   Sections:
 --       1 - Imports and Type declarations
@@ -25,7 +24,7 @@
 ---- 1 - IMPORTS AND TYPE DECLARATIONS -----------------------------------------
 
 import System.Random (getStdGen, setStdGen, randomRs)
-import Data.List (delete)
+import Data.List (sort)
 
 
   -- A point with its unique identity and coordinates
@@ -43,8 +42,8 @@ data Point = Point {pId :: Int, pX :: Int, pY :: Int} deriving (Eq, Ord, Read, S
 
 ---- 4 - MAIN FUNCTIONS --------------------------------------------------------
 
--- COMPILE: ghc -o randomTester -O randomTester
--- Or, Multi Core: ghc -o randomTester -O randomTester -threaded +RTS -N
+-- COMPILE: ghc -o 2opt -O 2opt
+-- Or, Multi Core: ghc -o 2opt -O 2opt -threaded +RTS -N
 
   -- IO and processing structure
 main = do
@@ -58,7 +57,7 @@ main = do
   setStdGen gen
   let randInds = randomRs (0, length points - 1) gen
 
-  bestText <- readFile "randomSolution.txt"
+  bestText <- readFile "2optSolution.txt"
   let best@(pLen,bestPids) = case lines bestText of
               [] -> (pathLength table pids, pids)
               x  -> read $ last x :: (Float,[Int])
@@ -67,17 +66,18 @@ main = do
 
   -- Main loop function, printing on terminal and writing on file only better solutions than before
 keepTrying :: [Point] -> [[Float]] -> [Int] -> [Int] -> (Float,[Int]) -> IO ()
-keepTrying points table pids randInds best@(pLen,_) = do
-  let newRandInds = take (length pids) randInds
-  let newPids = shuffle pids newRandInds
-  let newLength = pathLength table newPids
-
-  if newLength < pLen
-    then let newBest = (newLength,newPids) in do
+keepTrying points table pids (ri1:ri2:newRandInds) best@(pLen,_) = do
+  let [i1,i2] = sort [ri1, ri2]
+  let iMax = length points - 1
+  if smartShorterCheck table pids i1 i2 iMax
+    then do
+      let newPids = apply2opt pids i1 i2
+      let newLength = pathLength table newPids
+      let newBest = (newLength,newPids)
       --print newBest
-      appendFile "randomSolution.txt" $ show newBest ++ "\n"
+      writeFile "2optSolution.txt" $ show newBest ++ "\n"
       keepTrying points table newPids newRandInds newBest
-    else keepTrying points table newPids newRandInds best
+    else keepTrying points table pids newRandInds best
 
 
   -- Make a list of points data structure from the equivalent text
@@ -106,11 +106,46 @@ pathLength tab = fst . foldr sumUp (0,0)
         sumUp pid2 (d,pid1) = (d + tab!!pid1!!pid2, pid2)
 
 
-  -- Shuffle a list by splicing and modding a random list of integers to use as indexes
-shuffle :: Eq a => [a] -> [Int] -> [a]
-shuffle vals = fst . foldr shuf ([],vals)
-  where shuf i (acc,rest) = (v:acc, delete v rest)
-          where v = rest !! (i `mod` length rest)
+  -- Smartly check whether inverting a subset of a given path makes it shorter
+  -- (As opposed to doing it and then measuring it whole again)
+  -- Note that i1 must be <= i2
+smartShorterCheck :: [[Float]] -> [Int] -> Int -> Int -> Int -> Bool
+smartShorterCheck table pids i1 i2 iMax = (nd1 + nd2) < (d1 + d2)
+  where nd1 = table!!in1Pid!!out2Pid
+        nd2 = table!!out1Pid!!in2Pid
+
+        d1 = table!!out1Pid!!in1Pid
+        d2 = table!!in2Pid!!out2Pid
+
+        [out1Pid,in1Pid,in2Pid,out2Pid] = map (pids!!) [out1,in1,in2,out2]
+          -- The order above is how the points should be visualised:
+          -- the "in" points are swapped and those between them reversed
+
+        (out1,in1)
+          | i1 == 0   = (iMax,   i1)
+          | otherwise = (i1 - 1, i1)
+        (in2,out2)
+          | i2 == 0   = (iMax,   i2)
+          | otherwise = (i2 - 1, i2)
+          -- YES, like this, because i1 is the index of the first point in The
+          -- subset, while i2 is the index of the first one AFTER the subset
+          -- because they are used with splitAt; see apply2opt belowx
+
+
+  -- Apply the 2-opt algorithm: randomly pick
+  -- Note that i1 must be <= i2
+  -- Note also that splitAt's argument is the index of the first element of the second output
+apply2opt :: Eq a => [a] -> Int  -> Int -> [a]
+apply2opt vals i1 i2 = before ++ reverse subset ++ after
+  where (subset,after) = splitAt (i2 - i1) rest
+        (before,rest)  = splitAt i1 vals
+
+
+  -- Get a string in the required format from a "best" value (as defined in keepTrying)
+getString :: (Float,[Int]) -> IO ()
+getString (_,list) = do
+  writeFile "SOLUTION.txt" . unlines $ map show list
+
 
 
 
