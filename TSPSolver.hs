@@ -71,7 +71,8 @@ main = do
   let edges  = sortBy (compare `on` eLen) $ extractLengths points
   let (possLoop,rest) = spanPossLoop edges
   let (open,loops) = partitionFragments $ linkPossEdges possLoop
-  return $ map (map pId . pointsIn) open
+  return $ foldl (\\) possLoop (open ++ loops)
+  --return $ map (map pId . pointsIn) open
   --return $ map (map pId . pointsIn) loops
   --return $ linkPossEdges possLoop
   --return $ lengthAndPerm possLoop
@@ -135,6 +136,38 @@ linkPossEdges = getNextPid []
           where pidsInCommon = not . null . intersect (getPids ae)
 
 
+  -- Join up a set of fragments, be they open or closed
+joinUpFragments :: ([[Edge]],[[Edge]]) -> ([Edge],[Edge]) -> [Edge]
+joinUpFragments (open,loops) (possLoop,rest) = findLinks [] (open,loops) (reducedpossLoop ++ rest)
+  where reducedPossLoop = foldl (\\) possLoop (open ++ loops)
+        findLinks :: ([[Edge]],[[Edge]]) -> [Edge] -> [Edge]
+        findLinks ([],[l]) _ = l
+        findLinks ([],(l:los)) es =
+        findLinks (oops@(o:ops),llos@(l:los)) escase kind of
+          "oo" -> findLinks
+          "ol" ->
+          "lo" ->
+          "ll" ->
+          |     = findLinks (nop:op,lo) es
+          |      = findLinks (op,lo) es
+            where jointUp = 
+                  bestRes@(kind,(bd,be,bx)) = sortBy (compare `on` (\(_,(x,_,_))->x)) [coo, col, clo, cll]
+                  coo@(oobd,[oobe],oobop) = ("oo", closestOpOps o ops )
+                  col@(olbd,[olbe],olbop) = ("ol", closestOpLos o llos)
+                  clo@(lobd,[lobe],lobop) = ("lo", closestLoOps l oops)
+                  cll@(llbd,[llbe],llbop) = ("ll", closestLoLos l los )
+
+closestOpOps, closestOpLos, closestLoOps, closestLoLos :: [Edge] -> [[Edge]] -> (Float,[Edge],[Edge])
+closestOpOps op ops = foldr measure (99999999,[],[]) ops
+  where measure :: [Edge] -> (Float,[Edge],[Edge]) -> (Float,[Edge],[Edge])
+        measure nop (_,[],[]) = measureOpNop op nop
+        measure nop acc@(bd,[be],bop) = let nacc@(nd,_,_) = measureOpNop op nop in
+                                            if nd < d then nacc else acc
+closestOpLos o llos
+closestLoOps l oops
+closestLoLos l los
+
+
   -- Return the length of a loop and its corresponding permutation of points
 --lengthAndPerm :: [Edge] -> (Float,[Int])
 --lengthAndPerm lp = (l, perm)
@@ -182,9 +215,10 @@ stringify = unlines . map show . foldr orderPids []
   -- Partition path fragments into open ones and loops; it returns (open,loops)
 partitionFragments :: [[Edge]] -> ([[Edge]],[[Edge]])
 partitionFragments = partition isOpen
-  where isOpen [e]     = True
-        isOpen [e1,e2] = True
-        isOpen (e:es)  = null . (intersect `on` getPids) e $ last es
+isOpen :: [Edge] -> Bool
+isOpen [e]     = True
+isOpen [e1,e2] = True
+isOpen (e:es)  = null . (intersect `on` getPids) e $ last es
 
 
 -- Other Functions

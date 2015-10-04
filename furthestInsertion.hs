@@ -3,7 +3,7 @@
 --   Author:
 --       Dr-Lord
 --   Version:
---       0.2 03/10/2015
+--       0.1 04/10/2015
 --
 --   Repository:
 --       https://github.com/Dr-Lord/Haskell-Travelling-Salesman
@@ -12,7 +12,7 @@
 --      Program to solve or approximate a solution to a Travelling Salesman Problem
 --      as explained in this repository:
 --            https://github.com/GUTS2015/Glasgow-TSP-Challenge
---      This program implements the 2-opt optimisation algorithm for TSP.
+--      This program implements the Furthest Insertion optimisation algorithm for TSP.
 --
 --   Sections:
 --       1 - Imports and Type declarations
@@ -23,8 +23,8 @@
 
 ---- 1 - IMPORTS AND TYPE DECLARATIONS -----------------------------------------
 
-import System.Random (getStdGen, setStdGen, randomRs)
-import Data.List (sort)
+import Data.List (sort, sortBy, minimumBy, maximumBy, (\\))
+import Data.Function (on)
 
 
   -- A point with its unique identity and coordinates
@@ -48,8 +48,8 @@ data Point = Point {pId :: Int, pX :: Int, pY :: Int} deriving (Eq, Ord, Read, S
 
 ---- 4 - MAIN FUNCTIONS --------------------------------------------------------
 
--- COMPILE: ghc -o 2opt -O 2opt
--- Or, Multi Core: ghc -o 2opt -O 2opt -threaded +RTS -N
+-- COMPILE: ghc -o furthestInsertion -O furthestInsertion
+-- Or, Multi Core: ghc -o furthestInsertion -O furthestInsertion -threaded +RTS -N
 
   -- IO and processing structure
 main = do
@@ -59,31 +59,32 @@ main = do
   let table = genDists points
   let pids = [0.. length points - 1]
 
-  gen <- getStdGen
-  setStdGen gen
-  let randInds = randomRs (0, length points - 1) gen
+  let (maxDist,path) = getMaxDist table
 
-  bestText <- readFile "2optSolution.txt"
-  let best@(pLen,bestPids) = case lines bestText of
-              [] -> (pathLength table pids, pids)
-              x  -> read $ last x :: (Float,[Int])
-  keepTrying points table bestPids randInds best
+  let bestPath = getBestPath table path (pids \\ path)
+
+  writeFile "furthestInsertionSolution.txt" $ show bestPath
+  return bestPath
+  --return (maxDist,path)
 
 
-  -- Main loop function, printing on terminal and writing on file only better solutions than before
-keepTrying :: [Point] -> [[Float]] -> [Int] -> [Int] -> (Float,[Int]) -> IO ()
-keepTrying points table pids (ri1:ri2:newRandInds) best@(pLen,_) = do
-  let [i1,i2] = sort [ri1, ri2]
-  let iMax = length points - 1
-  if smartShorterCheck table pids i1 i2 iMax
-    then do
-      let newPids = apply2opt pids i1 i2
-      let newLength = pathLength table newPids
-      let newBest = (newLength,newPids)
-      --print newBest
-      writeFile "2optSolution.txt" $ show newBest ++ "\n"
-      keepTrying points table newPids newRandInds newBest
-    else keepTrying points table pids newRandInds best
+  -- Furthest Insertion Implementation
+getBestPath :: [[Float]] -> [Int] -> [Int] -> (Float,[Int])
+getBestPath table path pids = (pathLength table finalPath, finalPath)
+  where finalPath = foldr bestPidInsert path pids
+        bestPidInsert pid path' = snd $ minimumBy (compare `on` fst) allPidPositions
+          where allPidPositions = map (getNewPath path' pid) [1.. length path' - 1]
+
+        getNewPath :: [Int] -> Int -> Int -> (Float,[Int])
+        getNewPath pat pid ind = (nLen,nPids)
+          where nLen = pathLength table nPids
+                nPids = before ++ [pid] ++ after
+                (before,after) = splitAt ind pat
+
+          -- Checking whether the new path is shorter than the last can be done
+          -- more efficiently by simply removing an edge and replacing it with
+          -- two new ones; however it is not really worth it, as this whole method
+          -- does not come as close as 2opt to a solution
 
 
   -- Make a list of points data structure from the equivalent text
@@ -113,45 +114,10 @@ pathLength tab pids = len + tab!!firstPid!!lastPid
         sumUp pid2 (d,pid1,fp) = (d + tab!!pid1!!pid2, pid2, fp)
 
 
-  -- Smartly check whether inverting a subset of a given path makes it shorter
-  -- (As opposed to doing it and then measuring it whole again)
-  -- Note that i1 must be <= i2
-smartShorterCheck :: [[Float]] -> [Int] -> Int -> Int -> Int -> Bool
-smartShorterCheck table pids i1 i2 iMax = (nd1 + nd2) < (d1 + d2)
-  where nd1 = table!!in1Pid!!out2Pid
-        nd2 = table!!out1Pid!!in2Pid
-
-        d1 = table!!out1Pid!!in1Pid
-        d2 = table!!in2Pid!!out2Pid
-
-        [out1Pid,in1Pid,in2Pid,out2Pid] = map (pids!!) [out1,in1,in2,out2]
-          -- The order above is how the points should be visualised:
-          -- the "in" points are swapped and those between them reversed
-
-        (out1,in1)
-          | i1 == 0   = (iMax,   i1)
-          | otherwise = (i1 - 1, i1)
-        (in2,out2)
-          | i2 == 0   = (iMax,   i2)
-          | otherwise = (i2 - 1, i2)
-          -- YES, like this, because i1 is the index of the first point in The
-          -- subset, while i2 is the index of the first one AFTER the subset
-          -- because they are used with splitAt; see apply2opt belowx
-
-
-  -- Apply the 2-opt algorithm: randomly pick
-  -- Note that i1 must be <= i2
-  -- Note also that splitAt's argument is the index of the first element of the second output
-apply2opt :: Eq a => [a] -> Int  -> Int -> [a]
-apply2opt vals i1 i2 = before ++ reverse subset ++ after
-  where (subset,after) = splitAt (i2 - i1) rest
-        (before,rest)  = splitAt i1 vals
-
-
   -- Get a string in the required format from a "best" value (as defined in keepTrying)
 getString :: IO ()
 getString = do
-  bestText <- readFile "2optSolution.txt"
+  bestText <- readFile "furthestInsertionSolution.txt"
   let firstLine = head $ lines bestText
   let (_,best) = read firstLine :: (Float,[Int])
   writeFile "SOLUTION.txt" . unlines $ map show best
@@ -159,3 +125,10 @@ getString = do
 
 
 ---- 5 - OTHER FUNCTIONS -------------------------------------------------------
+
+ -- Return the indexes of the largest entry in a matrix
+getMaxDist :: [[Float]] -> (Float,[Int])
+getMaxDist table = (getDist path, path)
+  where path = maximumBy comp [[i,j] | i <- [0.. length table - 1], j <- [0.. length table - 1]]
+        comp = compare `on` getDist
+        getDist [i,j] = table!!i!!j

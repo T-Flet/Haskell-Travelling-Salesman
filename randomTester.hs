@@ -99,11 +99,12 @@ distance :: Point -> Point -> Float
 distance (Point _ x1 y1) (Point _ x2 y2) = sqrt $ fromIntegral ((x2 - x1)^2 + (y2 - y1)^2)
 
 
--- length of a path (lis ot pids)
+  -- length of a path (lis ot pids)
 pathLength :: [[Float]] -> [Int] -> Float
-pathLength tab = fst . foldr sumUp (0,0)
-  where sumUp pid  (0,0)    = (0,pid)
-        sumUp pid2 (d,pid1) = (d + tab!!pid1!!pid2, pid2)
+pathLength tab pids = len + tab!!firstPid!!lastPid
+  where (len,lastPid,firstPid) = foldr sumUp (0,0,0) pids
+        sumUp pid  (0,0,0)    = (0, pid, pid)
+        sumUp pid2 (d,pid1,fp) = (d + tab!!pid1!!pid2, pid2, fp)
 
 
   -- Shuffle a list by splicing and modding a random list of integers to use as indexes
