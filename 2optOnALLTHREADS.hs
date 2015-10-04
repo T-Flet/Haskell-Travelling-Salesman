@@ -3,7 +3,7 @@
 --   Author:
 --       Dr-Lord
 --   Version:
---       0.2 03/10/2015
+--       0.1 03-04/10/2015
 --
 --   Repository:
 --       https://github.com/Dr-Lord/Haskell-Travelling-Salesman
@@ -12,7 +12,10 @@
 --      Program to solve or approximate a solution to a Travelling Salesman Problem
 --      as explained in this repository:
 --            https://github.com/GUTS2015/Glasgow-TSP-Challenge
---      This program implements the 2-opt optimisation algorithm for TSP.
+--      This program implements the 2-opt optimisation algorithm for TSP in parallel
+--      on as many threads as are available; each of the threads produces a separate
+--      file with a different solution (as all the start points are random and the
+--      optimizations plateau quickly)
 --
 --   Sections:
 --       1 - Imports and Type declarations
@@ -25,6 +28,10 @@
 
 import System.Random (getStdGen, setStdGen, randomRs)
 import Data.List (sort)
+import GHC.Conc (numCapabilities)
+--import Control.Parallel.Strategies (using, parList, rdeepseq)
+--import Control.Concurrent.ParallelIO (parallel_)
+import Control.Concurrent (forkIO)
 
 
   -- A point with its unique identity and coordinates
@@ -48,22 +55,36 @@ data Point = Point {pId :: Int, pX :: Int, pY :: Int} deriving (Eq, Ord, Read, S
 
 ---- 4 - MAIN FUNCTIONS --------------------------------------------------------
 
--- COMPILE: ghc -o 2opt -O 2opt
--- Or, Multi Core: ghc -o 2opt -O 2opt -threaded +RTS -N
+-- COMPILE: ghc -o 2optOnALLTHREADS -O 2opt
+-- Or, Multi Core: ghc -o 2optOnALLTHREADS -O 2optOnALLTHREADS -threaded +RTS -N
 
   -- IO and processing structure
 main = do
   pointsText <- readFile "g7k.tsp"
-  --pointsText <- readFile "8.tsp"
   let points = extractPoints . map words $ lines pointsText
   let table = genDists points
   let pids = [0.. length points - 1]
 
+  putStrLn $ "The number of available threads on this machine is " ++ show numCapabilities
+
+  let fileNames = map ((++"-2OptResult.txt") . show) [1..numCapabilities]
+
+  map (forkIO . putStrLn) fileNames
+  --parallel_ $ map putStrLn fileNames
+
+  --parallel_ $ map (`writeFile` "") fileNames
+  --parallel_ $ map (singleFile points table pids) fileNames
+
+
+
+  -- 2opt on a single file
+singleFile :: [Point] -> [[Float]] -> [Int] -> String -> IO ()
+singleFile points table pids fileName = do
   gen <- getStdGen
   setStdGen gen
   let randInds = randomRs (0, length points - 1) gen
 
-  bestText <- readFile "2optSolution.txt"
+  bestText <- readFile fileName
   let best@(pLen,bestPids) = case lines bestText of
               [] -> (pathLength table pids, pids)
               x  -> read $ last x :: (Float,[Int])

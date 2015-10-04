@@ -50,7 +50,7 @@ data Point = Point {pId :: Int, pX :: Int, pY :: Int} deriving (Eq, Ord, Read, S
 main = do
   pointsText <- readFile "g7k.tsp"
   --pointsText <- readFile "test12.txt"
-  let points = extractPoints . map words . reverse $ lines pointsText
+  let points = extractPoints . map words $ lines pointsText
   let table = genDists points
   let pids = [0.. length points - 1]
 
@@ -75,7 +75,7 @@ keepTrying points table pids randInds best@(pLen,_) = do
   if newLength < pLen
     then let newBest = (newLength,newPids) in do
       --print newBest
-      appendFile "randomSolution.txt" $ show newBest ++ "\n"
+      writeFile "randomSolution.txt" $ show newBest ++ "\n"
       keepTrying points table newPids newRandInds newBest
     else keepTrying points table newPids newRandInds best
 
