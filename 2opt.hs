@@ -24,7 +24,7 @@
 ---- 1 - IMPORTS AND TYPE DECLARATIONS -----------------------------------------
 
 import System.Random (getStdGen, setStdGen, randomRs)
-import Data.List (sort)
+import Data.List (sort, delete)
 
 
   -- A point with its unique identity and coordinates
@@ -63,9 +63,13 @@ main = do
   setStdGen gen
   let randInds = randomRs (0, length points - 1) gen
 
+----
+----
+
   bestText <- readFile "2optSolution.txt"
   let best@(pLen,bestPids) = case lines bestText of
-              [] -> (pathLength table pids, pids)
+              [] -> let randPids = shuffle pids $ take (length pids) randInds in
+                      (pathLength table randPids, randPids)
               x  -> read $ last x :: (Float,[Int])
   keepTrying points table bestPids randInds best
 
@@ -146,6 +150,13 @@ apply2opt :: Eq a => [a] -> Int  -> Int -> [a]
 apply2opt vals i1 i2 = before ++ reverse subset ++ after
   where (subset,after) = splitAt (i2 - i1) rest
         (before,rest)  = splitAt i1 vals
+
+
+  -- Shuffle a list by splicing and modding a random list of integers to use as indexes
+shuffle :: Eq a => [a] -> [Int] -> [a]
+shuffle vals = fst . foldr shuf ([],vals)
+  where shuf i (acc,rest) = (v:acc, delete v rest)
+          where v = rest !! (i `mod` length rest)
 
 
   -- Get a string in the required format from a "best" value (as defined in keepTrying)
