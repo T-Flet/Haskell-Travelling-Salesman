@@ -17,6 +17,10 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# Haskell Compilation Stuff
+*.o
+*.hi
+
 # =========================
 # Operating System Files
 # =========================
