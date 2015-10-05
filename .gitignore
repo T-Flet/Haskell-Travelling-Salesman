@@ -20,6 +20,7 @@ $RECYCLE.BIN/
 # Haskell Compilation Stuff
 *.o
 *.hi
+*.exe
 
 # =========================
 # Operating System Files
